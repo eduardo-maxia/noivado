@@ -650,13 +650,14 @@ function CaptureScreen({
 
   return (
     <section className="space-y-5">
-      <div className="rounded-3xl border border-rose-100 bg-white p-6 text-center space-y-4 shadow-sm">
-        <div className="mx-auto h-72 w-44 rounded-3xl border-2 border-dashed border-rose-200 flex items-center justify-center text-rose-300 overflow-hidden relative">
+      <div className="rounded-3xl border border-rose-100 bg-white text-center space-y-4 shadow-sm">
+        <div className="mx-auto w-full rounded-3xl flex items-center justify-center text-rose-300 overflow-hidden relative">
           {captureMode === 'record' ? (
             <Webcam
               ref={webcamRef}
               audio
-              mirrored
+              muted
+              // mirrored
               onUserMedia={onCameraReady}
               onUserMediaError={onCameraError}
               screenshotFormat="image/jpeg"
