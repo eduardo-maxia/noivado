@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+body {
+  @apply m-0 bg-rose-50 text-slate-900 overflow-x-hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+    monospace;
+}
+
+.landscape-warning {
+  display: none;
+}
+
+@media (orientation: landscape) {
+  .landscape-warning {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 240, 246, 0.98);
+    color: #7f1d1d;
+    font-size: 1rem;
+    text-align: center;
+    padding: 2rem;
+  }
+}
