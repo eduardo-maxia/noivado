@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
+import Webcam from 'react-webcam'
 
 import { supabase } from '../lib/supabaseClient'
 
@@ -149,10 +150,10 @@ function HomeFlow() {
   const [isCameraReady, setIsCameraReady] = useState(false)
   const [outroIndex, setOutroIndex] = useState(0)
   const [showOutroVideo, setShowOutroVideo] = useState(false)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
 
   const inputRef = useRef<HTMLInputElement>(null)
-  const liveVideoRef = useRef<HTMLVideoElement>(null)
-  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const webcamRef = useRef<Webcam | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
 
@@ -198,34 +199,11 @@ function HomeFlow() {
     })
   }
 
-  const stopCamera = () => {
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
-    mediaStreamRef.current = null
+  const stopWebcam = () => {
+    const stream = (webcamRef.current as any)?.stream as MediaStream | undefined
+    stream?.getTracks().forEach((track) => track.stop())
     setIsCameraReady(false)
     setIsRecording(false)
-  }
-
-  const startCamera = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError('Câmera não disponível neste dispositivo.')
-      return
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' },
-        audio: true,
-      })
-      mediaStreamRef.current = stream
-      if (liveVideoRef.current) {
-        liveVideoRef.current.srcObject = stream
-      }
-      setCameraError(null)
-      setIsCameraReady(true)
-    } catch {
-      setCameraError('Não foi possível abrir a câmera. Tente novamente.')
-      setIsCameraReady(false)
-    }
   }
 
   const handleProcessFile = async (selected: File) => {
@@ -265,7 +243,11 @@ function HomeFlow() {
   }
 
   const startRecording = () => {
-    if (!mediaStreamRef.current) return
+    const stream = (webcamRef.current as any)?.stream as MediaStream | undefined
+    if (!stream) {
+      setCameraError('Câmera não disponível no momento.')
+      return
+    }
     if (!window.MediaRecorder) {
       setCameraError('Gravação não suportada neste navegador.')
       return
@@ -273,7 +255,7 @@ function HomeFlow() {
 
     try {
       recordedChunksRef.current = []
-      const recorder = new MediaRecorder(mediaStreamRef.current)
+      const recorder = new MediaRecorder(stream)
       recorderRef.current = recorder
 
       recorder.ondataavailable = (event) => {
@@ -295,6 +277,7 @@ function HomeFlow() {
 
       recorder.start()
       setIsRecording(true)
+      setRecordingSeconds(0)
     } catch {
       setCameraError('Não conseguimos iniciar a gravação.')
       setIsRecording(false)
@@ -303,6 +286,7 @@ function HomeFlow() {
 
   const stopRecording = () => {
     recorderRef.current?.stop()
+    setIsRecording(false)
   }
 
   const resetCapture = () => {
@@ -316,10 +300,9 @@ function HomeFlow() {
 
   useEffect(() => {
     if (step === 'capture' && captureMode === 'record') {
-      startCamera()
       return
     }
-    stopCamera()
+    stopWebcam()
   }, [step, captureMode])
 
   useEffect(() => {
@@ -328,6 +311,14 @@ function HomeFlow() {
       setShowOutroVideo(false)
     }
   }, [step])
+
+  useEffect(() => {
+    if (!isRecording) return
+    const id = window.setInterval(() => {
+      setRecordingSeconds((prev) => prev + 1)
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [isRecording])
 
   const handleSubmit = async () => {
     if (!file || !meta) return
@@ -444,12 +435,23 @@ function HomeFlow() {
             isCameraReady={isCameraReady}
             isRecording={isRecording}
             cameraError={cameraError}
+            recordingSeconds={recordingSeconds}
+            onCameraReady={() => {
+              setCameraError(null)
+              setIsCameraReady(true)
+            }}
+            onCameraError={() => {
+              setCameraError(
+                'Não foi possível abrir a câmera. Tente novamente.',
+              )
+              setIsCameraReady(false)
+            }}
             onStartRecording={startRecording}
             onStopRecording={stopRecording}
             onOpenFilePicker={openFilePicker}
             onBack={() => setStep('intro')}
             inputRef={inputRef}
-            liveVideoRef={liveVideoRef}
+            webcamRef={webcamRef}
             onFileChange={handleFileChange}
           />
         )}
@@ -543,6 +545,10 @@ function IntroScreen({
           Grave um recado curto e carinhoso. Este registro será guardado com
           cuidado e só será visto no momento certo.
         </p>
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          Esse vídeo vai aparecer no pedido de noivado. É super importante que
+          ela não descubra nada antes — por favor, mantenha em segredo.
+        </div>
       </div>
 
       <div className="grid gap-3">
@@ -615,8 +621,11 @@ function CaptureScreen({
   onOpenFilePicker,
   onBack,
   inputRef,
-  liveVideoRef,
+  webcamRef,
   onFileChange,
+  onCameraReady,
+  onCameraError,
+  recordingSeconds,
 }: {
   captureMode: CaptureMode
   isCameraReady: boolean
@@ -627,31 +636,42 @@ function CaptureScreen({
   onOpenFilePicker: () => void
   onBack: () => void
   inputRef: React.RefObject<HTMLInputElement | null>
-  liveVideoRef: React.RefObject<HTMLVideoElement | null>
+  webcamRef: React.RefObject<Webcam | null>
   onFileChange: (event: ChangeEvent<HTMLInputElement>) => void
+  onCameraReady: () => void
+  onCameraError: () => void
+  recordingSeconds: number
 }) {
+  const formatTime = (totalSeconds: number) => {
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${minutes}:${String(seconds).padStart(2, '0')}`
+  }
+
   return (
     <section className="space-y-5">
       <div className="rounded-3xl border border-rose-100 bg-white p-6 text-center space-y-4 shadow-sm">
         <div className="mx-auto h-72 w-44 rounded-3xl border-2 border-dashed border-rose-200 flex items-center justify-center text-rose-300 overflow-hidden relative">
-          {captureMode === 'record' && isCameraReady ? (
-            <video
-              ref={liveVideoRef}
-              autoPlay
-              muted
-              playsInline
+          {captureMode === 'record' ? (
+            <Webcam
+              ref={webcamRef}
+              audio
+              mirrored
+              onUserMedia={onCameraReady}
+              onUserMediaError={onCameraError}
+              screenshotFormat="image/jpeg"
+              videoConstraints={{ facingMode: 'user' }}
               className="h-full w-full object-cover"
             />
           ) : (
             <span>Vertical</span>
           )}
-          <div className="absolute bottom-2 left-2 rounded-full bg-white/80 px-3 py-1 text-xs text-rose-600">
-            Grave com o celular em pé
-          </div>
+          {captureMode === 'record' && isRecording && (
+            <div className="absolute top-2 right-2 rounded-full bg-rose-500 px-3 py-1 text-xs font-semibold text-white shadow">
+              {formatTime(recordingSeconds)}
+            </div>
+          )}
         </div>
-        <p className="text-sm text-slate-600">
-          Grave com o celular em pé para ficar perfeito.
-        </p>
         {captureMode === 'record' && cameraError && (
           <p className="text-sm text-rose-600">{cameraError}</p>
         )}
